@@ -12,6 +12,7 @@
  any redistribution
 *********************************************************************/
 
+
 #include <string.h>
 #include <Arduino.h>
 #include <SPI.h>
@@ -24,10 +25,15 @@
 #include "Adafruit_BluefruitLE_UART.h"
 
 
-// added libraries for using the DC motors
+// DC motor libraries
 #include <Wire.h>
 #include <Adafruit_MotorShield.h>
 #include "utility/Adafruit_MS_PWMServoDriver.h"
+
+
+// Adafruit NeoPixel library
+#include <Adafruit_NeoPixel.h>
+
 
 #include "BluefruitConfig.h"
 
@@ -64,7 +70,7 @@
                               "HWUART"  or "SPI"  or "MANUAL"
     -----------------------------------------------------------------------*/
     #define FACTORYRESET_ENABLE         0
-    
+
     #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
     #define MODE_LED_BEHAVIOUR          "MODE"
 /*=========================================================================*/
@@ -72,22 +78,25 @@
 
 
 
-
-
-
 // Create the object for the motor shield and the objects for the DC motors
 Adafruit_MotorShield motorShield = Adafruit_MotorShield();
-// the left motor corresponds to port M1
+// Left motor corresponds to port M1
 Adafruit_DCMotor *leftMotor = motorShield.getMotor(1);
-// the right motor corresponds to the port M2
-Adafruit_DCMotor *rightMotor = motorShield.getMotor(2) ;
-
-// setting the default speed of the motors
+// Right motor corresponds to the port M2
+Adafruit_DCMotor *rightMotor = motorShield.getMotor(2);
 
 
+// Define the NeoPixel pins
+#define LEFT_NEO 6
+#define RIGHT_NEO 7
+
+// Define the NeoPixel objects
+Adafruit_NeoPixel leftNeo = Adafruit_NeoPixel(12, LEFT_NEO);
+Adafruit_NeoPixel rightNeo = Adafruit_NeoPixel(12, RIGHT_NEO);
 
 
 // Create the bluefruit object, either software serial...uncomment these lines
+
 /*
 SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_SWUART_RXD_PIN);
 
@@ -131,11 +140,17 @@ extern uint8_t packetbuffer[];
 void setup(void) {
 
 
-  // calling the begin function on the motor shield object
+  // Call begin function on the motor shield object
   motorShield.begin();
-  
 
-  
+  // Prepare data pins for NeoPixel output
+  leftNeo.begin();
+  rightNeo.begin();
+
+  // Initalize all pixels to "off"
+  leftNeo.show();
+  rightNeo.show();
+
   while (!Serial);  // required for Flora & Micro
   delay(500);
 
@@ -211,7 +226,7 @@ void loop(void)
 {
   pinMode(3, OUTPUT);
   leftMotor->setSpeed(250);
-  rightMotor->setSpeed(250); 
+  rightMotor->setSpeed(250);
   /* Wait for new data to arrive */
   uint8_t len = readPacket(&ble, BLE_READPACKET_TIMEOUT);
   if (len == 0) return;
@@ -258,7 +273,7 @@ void loop(void)
       rightMotor->run(BACKWARD);
     }
     // pressing button 8 makes the right motor stop rotating
-    if (buttnum == 8) { 
+    if (buttnum == 8) {
       leftMotor->run(FORWARD);
     }
     /*if (buttnum == 5) {
@@ -266,7 +281,7 @@ void loop(void)
      digitalWrite(3, HIGH);
    }
    if (buttnum == 6) {
-     Serial.println("Turning off LED");      
+     Serial.println("Turning off LED");
      digitalWrite(3, LOW);
    }
    if (buttnum == 8) {
