@@ -229,13 +229,22 @@ void setup(void) {
 */
 /**************************************************************************/
 
-// initialize global motor speed variables
+// Initialize global motor speed variables
 int leftSpeed = 150;
 int rightSpeed = 150;
+
+// Initalize test colors for NeoPixels
 
 void loop(void)
 
 {
+
+  // Test NeoPixel Rings
+  for (int i = 0; i < 12; i++) {
+    leftNeo.setPixelColor(i, testLeft);
+    rightNeo.setPixelColor(i, testRight);
+  }
+
   pinMode(3, OUTPUT);
   leftMotor->setSpeed(leftSpeed);
   rightMotor->setSpeed(rightSpeed);
