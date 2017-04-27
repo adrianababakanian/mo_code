@@ -228,12 +228,17 @@ void setup(void) {
     @brief  Constantly poll for new command or response data
 */
 /**************************************************************************/
+
+// initialize global motor speed variables
+int leftSpeed = 150;
+int rightSpeed = 150;
+
 void loop(void)
 
 {
   pinMode(3, OUTPUT);
-  leftMotor->setSpeed(250);
-  rightMotor->setSpeed(250);
+  leftMotor->setSpeed(leftSpeed);
+  rightMotor->setSpeed(rightSpeed);
   /* Wait for new data to arrive */
   uint8_t len = readPacket(&ble, BLE_READPACKET_TIMEOUT);
   if (len == 0) return;
@@ -260,47 +265,49 @@ void loop(void)
     uint8_t buttnum = packetbuffer[2] - '0';
     boolean pressed = packetbuffer[3] - '0';
 
-    boolean codeUp = true;
-    boolean forward = false;
-    boolean back = false;
-    boolen left = false;
-    boolean right = false;
-
-    // 5 --> FORWARD
-    if (buttnum == 5) {
-      forward = true;
-      leftMotor->run(FORWARD);
-      rightMotor->run(BACKWARD);
-      while (forward) {
-
+    // increase motor speed with button 2
+    if (buttnum == 2) {
+      if (leftSpeed + 25 > 250) {
+        // don't increment
+      } else {
+        leftSpeed += 25;
+        rightSpeed += 25;
       }
-
     }
-    // 1 --> STOP
-    if (buttnum == 1) {
-      forward = false;
-      bacl = false;
-      left = false;
-      right = false;
+    // decrease motor speed with button 4
+    if (buttnum == 4) {
+      if (leftSpeed - 25 < 0) {
+        // don't decrement
+      } else {
+        leftSpeed -= 25;
+        rightSpeed -= 25;
+      }
+    }
+    // if not holding down a movement button, then don't go
+    if (!pressed and (buttnum != 2) and (buttnum != 4)) {
       leftMotor->run(RELEASE);
       rightMotor->run(RELEASE);
+    } else {
+      // 5 --> FORWARD
+      if (buttnum == 5) {
+        leftMotor->run(FORWARD);
+        rightMotor->run(BACKWARD);
+      }
+      // 6 --> BACKWARD
+      if (buttnum == 6) {
+        leftMotor->run(BACKWARD);
+        rightMotor->run(FORWARD);
+      }
+      // 7 --> TURN_LEFT
+      if (buttnum == 7) {
+        rightMotor->run(BACKWARD);
+      }
+      // 8 --> TURN_RIGHT
+      if (buttnum == 8) {
+        leftMotor->run(FORWARD);
+      }
     }
-    // 6 --> BACKWARD
-    if (buttnum == 6) {
-      back = true;
-      leftMotor->run(BACKWARD);
-      rightMotor->run(FORWARD);
-    }
-    // 7 --> TURN_LEFT
-    if (buttnum == 7) {
-      left = true;
-      rightMotor->run(BACKWARD);
-    }
-    // 8 --> TURN_RIGHT
-    if (buttnum == 8) {
-      right = true;
-      leftMotor->run(FORWARD);
-    }
+
 
     Serial.print ("Button "); Serial.print(buttnum);
     if (pressed) {
