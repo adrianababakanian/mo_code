@@ -1,401 +1,4 @@
-/*********************************************************************
- This is an example for our nRF51822 based Bluefruit LE modules
-
- Pick one up today in the adafruit shop!
-
- Adafruit invests time and resources providing this open source code,
- please support Adafruit and open-source hardware by purchasing
- products from Adafruit!
-
- MIT license, check LICENSE for more information
- All text above, and the splash screen below must be included in
- any redistribution
-*********************************************************************/
-
-
-#include <string.h>
-#include <Arduino.h>
-#include <SPI.h>
-#if not defined (_VARIANT_ARDUINO_DUE_X_) && not defined (_VARIANT_ARDUINO_ZERO_)
-  #include <SoftwareSerial.h>
-#endif
-
-#include "Adafruit_BLE.h"
-#include "Adafruit_BluefruitLE_SPI.h"
-#include "Adafruit_BluefruitLE_UART.h"
-
-
-// DC motor libraries
-#include <Wire.h>
-#include <Adafruit_MotorShield.h>
-#include "utility/Adafruit_MS_PWMServoDriver.h"
-
-
-// Adafruit NeoPixel library
 #include <Adafruit_NeoPixel.h>
-
-
-#include "BluefruitConfig.h"
-
-
-/*=========================================================================
-    APPLICATION SETTINGS
-
-    FACTORYRESET_ENABLE       Perform a factory reset when running this sketch
-   
-                              Enabling this will put your Bluefruit LE module
-                              in a 'known good' state and clear any config
-                              data set in previous sketches or projects, so
-                              running this at least once is a good idea.
-   
-                              When deploying your project, however, you will
-                              want to disable factory reset by setting this
-                              value to 0.  If you are making changes to your
-                              Bluefruit LE device via AT commands, and those
-                              changes aren't persisting across resets, this
-                              is the reason why.  Factory reset will erase
-                              the non-volatile memory where config data is
-                              stored, setting it back to factory default
-                              values.
-       
-                              Some sketches that require you to bond to a
-                              central device (HID mouse, keyboard, etc.)
-                              won't work at all with this feature enabled
-                              since the factory reset will clear all of the
-                              bonding data stored on the chip, meaning the
-                              central device won't be able to reconnect.
-    MINIMUM_FIRMWARE_VERSION  Minimum firmware version to have some new features
-    MODE_LED_BEHAVIOUR        LED activity, valid options are
-                              "DISABLE" or "MODE" or "BLEUART" or
-                              "HWUART"  or "SPI"  or "MANUAL"
-    -----------------------------------------------------------------------*/
-    #define FACTORYRESET_ENABLE         0
-
-    #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
-    #define MODE_LED_BEHAVIOUR          "MODE"
-/*=========================================================================*/
-
-
-
-
-// Create the object for the motor shield and the objects for the DC motors
-Adafruit_MotorShield motorShield = Adafruit_MotorShield();
-// Left motor corresponds to port M1
-Adafruit_DCMotor *leftMotor = motorShield.getMotor(1);
-// Right motor corresponds to the port M2
-Adafruit_DCMotor *rightMotor = motorShield.getMotor(2);
-
-
-// Define the NeoPixel pins
-#define LEFT_NEO 6
-#define RIGHT_NEO 7
-
-// Define the NeoPixel objects
-Adafruit_NeoPixel leftNeo = Adafruit_NeoPixel(12, LEFT_NEO);
-Adafruit_NeoPixel rightNeo = Adafruit_NeoPixel(12, RIGHT_NEO);
-
-
-// Create the bluefruit object, either software serial...uncomment these lines
-
-/*
-SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_SWUART_RXD_PIN);
-
-Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN,
-                      BLUEFRUIT_UART_CTS_PIN, BLUEFRUIT_UART_RTS_PIN);
-*/
-
-/* ...or hardware serial, which does not need the RTS/CTS pins. Uncomment this line */
-// Adafruit_BluefruitLE_UART ble(BLUEFRUIT_HWSERIAL_NAME, BLUEFRUIT_UART_MODE_PIN);
-
-/* ...hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user selected CS/IRQ/RST */
-Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
-
-/* ...software SPI, using SCK/MOSI/MISO user-defined SPI pins and then user selected CS/IRQ/RST */
-//Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_SCK, BLUEFRUIT_SPI_MISO,
-//                             BLUEFRUIT_SPI_MOSI, BLUEFRUIT_SPI_CS,
-//                             BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
-
-
-// A small helper
-void error(const __FlashStringHelper*err) {
-  Serial.println(err);
-  while (1);
-}
-
-// function prototypes over in packetparser.cpp
-uint8_t readPacket(Adafruit_BLE *ble, uint16_t timeout);
-float parsefloat(uint8_t *buffer);
-void printHex(const uint8_t * data, const uint32_t numBytes);
-
-// the packet buffer
-extern uint8_t packetbuffer[];
-
-
-/**************************************************************************/
-/*!
-    @brief  Sets up the HW an the BLE module (this function is called
-            automatically on startup)
-*/
-/**************************************************************************/
-void setup(void) {
-
-
-  // Call begin function on the motor shield object
-  motorShield.begin();
-
-  // Prepare data pins for NeoPixel output
-  leftNeo.begin();
-  rightNeo.begin();
-
-  // Initalize all pixels to "off"
-  leftNeo.show();
-  rightNeo.show();
-
-  // Set the NeoPixel brightness
-  leftNeo.setBrightness(200);
-  rightNeo.setBrightness(200);
-
-  leftNeo.show();
-  rightNeo.show();
-
-  while (!Serial);  // required for Flora & Micro
-  delay(500);
-
-  Serial.begin(115200);
-  Serial.println(F("Adafruit Bluefruit App Controller Example"));
-  Serial.println(F("-----------------------------------------"));
-
-  /* Initialise the module */
-  Serial.print(F("Initialising the Bluefruit LE module: "));
-
-  if ( !ble.begin(VERBOSE_MODE) )
-  {
-    error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
-  }
-  Serial.println( F("OK!") );
-
-  if ( FACTORYRESET_ENABLE )
-  {
-    /* Perform a factory reset to make sure everything is in a known state */
-    Serial.println(F("Performing a factory reset: "));
-    if ( ! ble.factoryReset() ){
-      error(F("Couldn't factory reset"));
-    }
-  }
-
-
-  /* Disable command echo from Bluefruit */
-  ble.echo(false);
-
-  Serial.println("Requesting Bluefruit info:");
-  /* Print Bluefruit information */
-  ble.info();
-
-  Serial.println(F("Please use Adafruit Bluefruit LE app to connect in Controller mode"));
-  Serial.println(F("Then activate/use the sensors, color picker, game controller, etc!"));
-  Serial.println();
-
-  ble.verbose(false);  // debug info is a little annoying after this point!
-
-  /* Wait for connection */
-  while (! ble.isConnected()) {
-      delay(500);
-  }
-
-  Serial.println(F("******************************"));
-
-  // LED Activity command is only supported from 0.6.6
-  if ( ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION) )
-  {
-    // Change Mode LED Activity
-    Serial.println(F("Change LED activity to " MODE_LED_BEHAVIOUR));
-    ble.sendCommandCheckOK("AT+HWModeLED=" MODE_LED_BEHAVIOUR);
-  }
-
-  // Set Bluefruit to DATA mode
-  Serial.println( F("Switching to DATA mode!") );
-  ble.setMode(BLUEFRUIT_MODE_DATA);
-
-  Serial.println(F("******************************"));
-
-  leftMotor->run(RELEASE);
-  rightMotor->run(RELEASE);
-
-}
-
-/**************************************************************************/
-/*!
-    @brief  Constantly poll for new command or response data
-*/
-/**************************************************************************/
-
-// Initialize global motor speed variables
-int leftSpeed = 150;
-int rightSpeed = 150;
-
-// Initalize test colors for NeoPixels
-
-void loop(void)
-
-{
-
-  // Test NeoPixel Rings
-  for (int i = 0; i < 12; i++) {
-    leftNeo.setPixelColor(i, testLeft);
-    rightNeo.setPixelColor(i, testRight);
-  }
-
-  pinMode(3, OUTPUT);
-  leftMotor->setSpeed(leftSpeed);
-  rightMotor->setSpeed(rightSpeed);
-  /* Wait for new data to arrive */
-  uint8_t len = readPacket(&ble, BLE_READPACKET_TIMEOUT);
-  if (len == 0) return;
-
-  /* Got a packet! */
-  // printHex(packetbuffer, len);
-
-  // Color
-  if (packetbuffer[1] == 'C') {
-    uint8_t red = packetbuffer[2];
-    uint8_t green = packetbuffer[3];
-    uint8_t blue = packetbuffer[4];
-    Serial.print ("RGB #");
-    if (red < 0x10) Serial.print("0");
-    Serial.print(red, HEX);
-    if (green < 0x10) Serial.print("0");
-    Serial.print(green, HEX);
-    if (blue < 0x10) Serial.print("0");
-    Serial.println(blue, HEX);
-  }
-
-  // Buttons
-  if (packetbuffer[1] == 'B') {
-    uint8_t buttnum = packetbuffer[2] - '0';
-    boolean pressed = packetbuffer[3] - '0';
-
-    // increase motor speed with button 2
-    if (buttnum == 2) {
-      if (leftSpeed + 25 > 250) {
-        // don't increment
-      } else {
-        leftSpeed += 25;
-        rightSpeed += 25;
-      }
-    }
-    // decrease motor speed with button 4
-    if (buttnum == 4) {
-      if (leftSpeed - 25 < 0) {
-        // don't decrement
-      } else {
-        leftSpeed -= 25;
-        rightSpeed -= 25;
-      }
-    }
-    // if not holding down a movement button, then don't go
-    if (!pressed and (buttnum != 2) and (buttnum != 4)) {
-      leftMotor->run(RELEASE);
-      rightMotor->run(RELEASE);
-    } else {
-      // 5 --> FORWARD
-      if (buttnum == 5) {
-        leftMotor->run(FORWARD);
-        rightMotor->run(BACKWARD);
-      }
-      // 6 --> BACKWARD
-      if (buttnum == 6) {
-        leftMotor->run(BACKWARD);
-        rightMotor->run(FORWARD);
-      }
-      // 7 --> TURN_LEFT
-      if (buttnum == 7) {
-        rightMotor->run(BACKWARD);
-      }
-      // 8 --> TURN_RIGHT
-      if (buttnum == 8) {
-        leftMotor->run(FORWARD);
-      }
-    }
-
-
-    Serial.print ("Button "); Serial.print(buttnum);
-    if (pressed) {
-      Serial.println(" pressed");
-    } else {
-      Serial.println(" released");
-    }
-  }
-  // GPS Location
-  if (packetbuffer[1] == 'L') {
-    float lat, lon, alt;
-    lat = parsefloat(packetbuffer+2);
-    lon = parsefloat(packetbuffer+6);
-    alt = parsefloat(packetbuffer+10);
-    Serial.print("GPS Location\t");
-    Serial.print("Lat: "); Serial.print(lat, 4); // 4 digits of precision!
-    Serial.print('\t');
-    Serial.print("Lon: "); Serial.print(lon, 4); // 4 digits of precision!
-    Serial.print('\t');
-    Serial.print(alt, 4); Serial.println(" meters");
-  }
-
-  // Accelerometer
-  //if (packetbuffer[1] == 'A') {
-    //float x, y, z;
-    //x = parsefloat(packetbuffer+2);
-    //y = parsefloat(packetbuffer+6);
-    //z = parsefloat(packetbuffer+10);
-    //Serial.print("Accel\t");
-    //Serial.print(x); Serial.print('\t');
-    //Serial.print(y); Serial.print('\t');
-    //Serial.print(z); Serial.println();
-  //}
-
-  // Magnetometer
-  if (packetbuffer[1] == 'M') {
-    float x, y, z;
-    x = parsefloat(packetbuffer+2);
-    y = parsefloat(packetbuffer+6);
-    z = parsefloat(packetbuffer+10);
-    Serial.print("Mag\t");
-    Serial.print(x); Serial.print('\t');
-    Serial.print(y); Serial.print('\t');
-    Serial.print(z); Serial.println();
-  }
-
-  // Gyroscope
-  if (packetbuffer[1] == 'G') {
-    float x, y, z;
-    x = parsefloat(packetbuffer+2);
-    y = parsefloat(packetbuffer+6);
-    z = parsefloat(packetbuffer+10);
-    Serial.print("Gyro\t");
-    Serial.print(x); Serial.print('\t');
-    Serial.print(y); Serial.print('\t');
-    Serial.print(z); Serial.println();
-  }
-
-  // Quaternions
-  if (packetbuffer[1] == 'Q') {
-    float x, y, z, w;
-    x = parsefloat(packetbuffer+2);
-    y = parsefloat(packetbuffer+6);
-    z = parsefloat(packetbuffer+10);
-    w = parsefloat(packetbuffer+14);
-    Serial.print("Quat\t");
-    Serial.print(x); Serial.print('\t');
-    Serial.print(y); Serial.print('\t');
-    Serial.print(z); Serial.print('\t');
-    Serial.print(w); Serial.println();
-  }
- }
-
-
-
-
-
-
- #include <Adafruit_NeoPixel.h>
 
 // Pattern types supported:
 enum  pattern { NONE, RAINBOW_CYCLE, THEATER_CHASE, COLOR_WIPE, SCANNER, FADE };
@@ -688,113 +291,519 @@ class NeoPatterns : public Adafruit_NeoPixel
 
 void Ring1Complete();
 void Ring2Complete();
-void StickComplete();
 
-// Define some NeoPatterns for the two rings and the stick
-//  as well as some completion routines
-NeoPatterns Ring1(24, 5, NEO_GRB + NEO_KHZ800, &Ring1Complete);
-NeoPatterns Ring2(16, 6, NEO_GRB + NEO_KHZ800, &Ring2Complete);
-NeoPatterns Stick(16, 7, NEO_GRB + NEO_KHZ800, &StickComplete);
 
-// Initialize everything and prepare to start
-void setup()
-{
-  Serial.begin(115200);
-
-   pinMode(8, INPUT_PULLUP);
-   pinMode(9, INPUT_PULLUP);
-
-    // Initialize all the pixelStrips
-    Ring1.begin();
-    Ring2.begin();
-    Stick.begin();
-
-    // Kick off a pattern
-    Ring1.TheaterChase(Ring1.Color(255,255,0), Ring1.Color(0,0,50), 100);
-    Ring2.RainbowCycle(3);
-    Ring2.Color1 = Ring1.Color1;
-    Stick.Scanner(Ring1.Color(255,0,0), 55);
-}
-
-// Main loop
-void loop()
-{
-    // Update the rings.
-    Ring1.Update();
-    Ring2.Update();
-
-    // Switch patterns on a button press:
-    if (digitalRead(8) == LOW) // Button #1 pressed
-    {
-        // Switch Ring1 to FASE pattern
-        Ring1.ActivePattern = FADE;
-        Ring1.Interval = 20;
-        // Speed up the rainbow on Ring2
-        Ring2.Interval = 0;
-        // Set stick to all red
-        Stick.ColorSet(Stick.Color(255, 0, 0));
-    }
-    else if (digitalRead(9) == LOW) // Button #2 pressed
-    {
-        // Switch to alternating color wipes on Rings1 and 2
-        Ring1.ActivePattern = COLOR_WIPE;
-        Ring2.ActivePattern = COLOR_WIPE;
-        Ring2.TotalSteps = Ring2.numPixels();
-        // And update tbe stick
-        Stick.Update();
-    }
-    else // Back to normal operation
-    {
-        // Restore all pattern parameters to normal values
-        Ring1.ActivePattern = THEATER_CHASE;
-        Ring1.Interval = 100;
-        Ring2.ActivePattern = RAINBOW_CYCLE;
-        Ring2.TotalSteps = 255;
-        Ring2.Interval = min(10, Ring2.Interval);
-        // And update tbe stick
-        Stick.Update();
-    }
-}
 
 //------------------------------------------------------------
 //Completion Routines - get called on completion of a pattern
 //------------------------------------------------------------
 
+
+
+
+
+
+/* Beginning of original code without NeoPattern Class and definitions */
+
+
+
+
+/*********************************************************************
+  This is an example for our nRF51822 based Bluefruit LE modules
+
+  Pick one up today in the adafruit shop!
+
+  Adafruit invests time and resources providing this open source code,
+  please support Adafruit and open-source hardware by purchasing
+  products from Adafruit!
+
+  MIT license, check LICENSE for more information
+  All text above, and the splash screen below must be included in
+  any redistribution
+*********************************************************************/
+
+#include <string.h>
+#include <Arduino.h>
+#include <SPI.h>
+#if not defined (_VARIANT_ARDUINO_DUE_X_) && not defined (_VARIANT_ARDUINO_ZERO_)
+#include <SoftwareSerial.h>
+#endif
+
+#include "Adafruit_BLE.h"
+#include "Adafruit_BluefruitLE_SPI.h"
+#include "Adafruit_BluefruitLE_UART.h"
+
+
+// added libraries for using the DC motors
+#include <Wire.h>
+#include <Adafruit_MotorShield.h>
+#include "utility/Adafruit_MS_PWMServoDriver.h"
+
+#include "BluefruitConfig.h"
+
+
+// Adafruit NeoPixel Library
+
+#include <Adafruit_NeoPixel.h>
+
+
+
+
+
+
+
+/*=========================================================================
+    APPLICATION SETTINGS
+
+      FACTORYRESET_ENABLE       Perform a factory reset when running this sketch
+     
+                                Enabling this will put your Bluefruit LE module
+                              in a 'known good' state and clear any config
+                              data set in previous sketches or projects, so
+                                running this at least once is a good idea.
+     
+                                When deploying your project, however, you will
+                              want to disable factory reset by setting this
+                              value to 0.  If you are making changes to your
+                                Bluefruit LE device via AT commands, and those
+                              changes aren't persisting across resets, this
+                              is the reason why.  Factory reset will erase
+                              the non-volatile memory where config data is
+                              stored, setting it back to factory default
+                              values.
+         
+                                Some sketches that require you to bond to a
+                              central device (HID mouse, keyboard, etc.)
+                              won't work at all with this feature enabled
+                              since the factory reset will clear all of the
+                              bonding data stored on the chip, meaning the
+                              central device won't be able to reconnect.
+    MINIMUM_FIRMWARE_VERSION  Minimum firmware version to have some new features
+    MODE_LED_BEHAVIOUR        LED activity, valid options are
+                              "DISABLE" or "MODE" or "BLEUART" or
+                              "HWUART"  or "SPI"  or "MANUAL"
+    -----------------------------------------------------------------------*/
+#define FACTORYRESET_ENABLE         0
+
+#define MINIMUM_FIRMWARE_VERSION    "0.6.6"
+#define MODE_LED_BEHAVIOUR          "MODE"
+/*=========================================================================*/
+
+
+#define LEFT_NEO 4
+#define RIGHT_NEO 5
+
+
+
+// Create the object for the motor shield and the objects for the DC motors
+Adafruit_MotorShield motorShield = Adafruit_MotorShield();
+// the left motor corresponds to port M1
+Adafruit_DCMotor *leftMotor = motorShield.getMotor(1);
+// the right motor corresponds to the port M2
+Adafruit_DCMotor *rightMotor = motorShield.getMotor(2);
+
+// setting the default speed of the motors
+
+
+// Define the NeoPixel objects
+Adafruit_NeoPixel leftNeo = Adafruit_NeoPixel(12, LEFT_NEO);
+Adafruit_NeoPixel rightNeo = Adafruit_NeoPixel(12, RIGHT_NEO);
+
+
+//// Define the NeoPattern objects
+//// ring 1 is the left ring
+NeoPatterns Ring1(12, 4, NEO_GRB + NEO_KHZ800, &Ring1Complete);
+//// ring 2 is the right ring
+NeoPatterns Ring2(12, 5, NEO_GRB + NEO_KHZ800, &Ring2Complete);
+
+
+
+
+// Create the bluefruit object, either software serial...uncomment these lines
+/*
+  SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_SWUART_RXD_PIN);
+
+  Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN,
+                      BLUEFRUIT_UART_CTS_PIN, BLUEFRUIT_UART_RTS_PIN);
+*/
+
+/* ...or hardware serial, which does not need the RTS/CTS pins. Uncomment this line */
+// Adafruit_BluefruitLE_UART ble(BLUEFRUIT_HWSERIAL_NAME, BLUEFRUIT_UART_MODE_PIN);
+
+/* ...hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user selected CS/IRQ/RST */
+Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
+
+/* ...software SPI, using SCK/MOSI/MISO user-defined SPI pins and then user selected CS/IRQ/RST */
+//Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_SCK, BLUEFRUIT_SPI_MISO,
+//                             BLUEFRUIT_SPI_MOSI, BLUEFRUIT_SPI_CS,
+//                             BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
+
+
+// A small helper
+void error(const __FlashStringHelper*err) {
+  Serial.println(err);
+  while (1);
+}
+
+// function prototypes over in packetparser.cpp
+uint8_t readPacket(Adafruit_BLE *ble, uint16_t timeout);
+float parsefloat(uint8_t *buffer);
+void printHex(const uint8_t * data, const uint32_t numBytes);
+
+// the packet buffer
+extern uint8_t packetbuffer[];
+
+
+/**************************************************************************/
+/*!
+    @brief  Sets up the HW an the BLE module (this function is called
+            automatically on startup)
+*/
+/**************************************************************************/
+void setup(void) {
+
+
+  // calling the begin function on the motor shield object
+  motorShield.begin();
+
+  Ring1.begin();
+  Ring2.begin();
+
+
+  Ring1.TheaterChase(Ring1.Color(0,255,0), Ring1.Color(0,0,255), 20);
+  Ring2.TheaterChase(Ring1.Color(0,255,0), Ring1.Color(0,0,255), 20);
+
+
+//  leftNeo.begin();
+//  rightNeo.begin();
+//
+//  leftNeo.show();
+//  rightNeo.show();
+//
+//  leftNeo.setBrightness(50);
+//  rightNeo.setBrightness(50);
+//
+//  rightNeo.show();
+//  leftNeo.show();
+//
+//
+//  rightNeo.setPixelColor(0, 0, 0, 255);
+//  rightNeo.setPixelColor(1, 0, 0, 255);
+//  rightNeo.setPixelColor(2, 0, 0, 255);
+//  rightNeo.setPixelColor(3, 0, 0, 255);
+//  rightNeo.setPixelColor(4, 0, 0, 255);
+//  rightNeo.setPixelColor(5, 0, 0, 255);
+//  rightNeo.setPixelColor(6, 0, 0, 255);
+//  rightNeo.setPixelColor(7, 0, 0, 255);
+//  rightNeo.setPixelColor(8, 0, 0, 255);
+//  rightNeo.setPixelColor(9, 0, 0, 255);
+//  rightNeo.setPixelColor(10, 0, 0, 255);
+//  rightNeo.setPixelColor(11, 0, 0, 255);
+//
+//  leftNeo.setPixelColor(0, 0, 0, 255);
+//  leftNeo.setPixelColor(1, 0, 0, 255);
+//  leftNeo.setPixelColor(2, 0, 0, 255);
+//  leftNeo.setPixelColor(3, 0, 0, 255);
+//  leftNeo.setPixelColor(4, 0, 0, 255);
+//  leftNeo.setPixelColor(5, 0, 0, 255);
+//  leftNeo.setPixelColor(6, 0, 0, 255);
+//  leftNeo.setPixelColor(7, 0, 0, 255);
+//  leftNeo.setPixelColor(8, 0, 0, 255);
+//  leftNeo.setPixelColor(9, 0, 0, 255);
+//  leftNeo.setPixelColor(10, 0, 0, 255);
+//  leftNeo.setPixelColor(11, 0, 0, 255);
+//
+//    rightNeo.show();
+//  leftNeo.show();
+
+
+
+
+  while (!Serial);  // required for Flora & Micro
+  delay(500);
+
+  Serial.begin(115200);
+  Serial.println(F("Adafruit Bluefruit App Controller Example"));
+  Serial.println(F("-----------------------------------------"));
+
+  /* Initialise the module */
+  Serial.print(F("Initialising the Bluefruit LE module: "));
+
+  if ( !ble.begin(VERBOSE_MODE) )
+  {
+    error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
+  }
+  Serial.println( F("OK!") );
+
+  if ( FACTORYRESET_ENABLE )
+  {
+    /* Perform a factory reset to make sure everything is in a known state */
+    Serial.println(F("Performing a factory reset: "));
+    if ( ! ble.factoryReset() ) {
+      error(F("Couldn't factory reset"));
+    }
+  }
+
+
+  /* Disable command echo from Bluefruit */
+  ble.echo(false);
+
+  Serial.println("Requesting Bluefruit info:");
+  /* Print Bluefruit information */
+  ble.info();
+
+  Serial.println(F("Please use Adafruit Bluefruit LE app to connect in Controller mode"));
+  Serial.println(F("Then activate/use the sensors, color picker, game controller, etc!"));
+  Serial.println();
+
+  ble.verbose(false);  // debug info is a little annoying after this point!
+
+  /* Wait for connection */
+  while (! ble.isConnected()) {
+    delay(500);
+  }
+
+  Serial.println(F("******************************"));
+
+  // LED Activity command is only supported from 0.6.6
+  if ( ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION) )
+  {
+    // Change Mode LED Activity
+    Serial.println(F("Change LED activity to " MODE_LED_BEHAVIOUR));
+    ble.sendCommandCheckOK("AT+HWModeLED=" MODE_LED_BEHAVIOUR);
+  }
+
+  // Set Bluefruit to DATA mode
+  Serial.println( F("Switching to DATA mode!") );
+  ble.setMode(BLUEFRUIT_MODE_DATA);
+
+  Serial.println(F("******************************"));
+
+  leftMotor->run(RELEASE);
+  rightMotor->run(RELEASE);
+
+}
+
+/**************************************************************************/
+/*!
+    @brief  Constantly poll for new command or response data
+*/
+/**************************************************************************/
+
+int leftSpeed = 50;
+int rightSpeed = 50;
+
+void loop(void)
+
+{
+
+//  Ring1.Update();
+//  Ring2.Update();
+
+//  leftNeo.setPixelColor(2, 0, 0, 255);
+//
+//  rightNeo.setPixelColor(0, 0, 0, 255);
+//  rightNeo.setPixelColor(1, 0, 0, 255);
+//  rightNeo.setPixelColor(2, 0, 0, 255);
+//  rightNeo.setPixelColor(3, 0, 0, 255);
+//  rightNeo.setPixelColor(4, 0, 0, 255);
+//  rightNeo.setPixelColor(5, 0, 0, 255);
+//  rightNeo.setPixelColor(6, 0, 0, 255);
+//  rightNeo.setPixelColor(7, 0, 0, 255);
+//  rightNeo.setPixelColor(8, 0, 0, 255);
+//  rightNeo.setPixelColor(9, 0, 0, 255);
+//  rightNeo.setPixelColor(10, 0, 0, 255);
+//  rightNeo.setPixelColor(11, 0, 0, 255);
+//
+//  leftNeo.setPixelColor(0, 0, 0, 255);
+//  leftNeo.setPixelColor(1, 0, 0, 255);
+//  leftNeo.setPixelColor(2, 0, 0, 255);
+//  leftNeo.setPixelColor(3, 0, 0, 255);
+//  leftNeo.setPixelColor(4, 0, 0, 255);
+//  leftNeo.setPixelColor(5, 0, 0, 255);
+//  leftNeo.setPixelColor(6, 0, 0, 255);
+//  leftNeo.setPixelColor(7, 0, 0, 255);
+//  leftNeo.setPixelColor(8, 0, 0, 255);
+//  leftNeo.setPixelColor(9, 0, 0, 255);
+//  leftNeo.setPixelColor(10, 0, 0, 255);
+//  leftNeo.setPixelColor(11, 0, 0, 255);
+//
+//
+//  leftNeo.show();
+//  rightNeo.show();
+
+
+  pinMode(3, OUTPUT);
+  leftMotor->setSpeed(leftSpeed);
+  rightMotor->setSpeed(rightSpeed);
+  /* Wait for new data to arrive */
+  uint8_t len = readPacket(&ble, BLE_READPACKET_TIMEOUT);
+  if (len == 0) return;
+
+  /* Got a packet! */
+  // printHex(packetbuffer, len);
+
+  // Color
+  if (packetbuffer[1] == 'C') {
+    uint8_t red = packetbuffer[2];
+    uint8_t green = packetbuffer[3];
+    uint8_t blue = packetbuffer[4];
+    Serial.print ("RGB #");
+    if (red < 0x10) Serial.print("0");
+    Serial.print(red, HEX);
+    if (green < 0x10) Serial.print("0");
+    Serial.print(green, HEX);
+    if (blue < 0x10) Serial.print("0");
+    Serial.println(blue, HEX);
+  }
+
+
+  // notes about electronics:
+  // minus goes with black
+  // long wire foes with red
+  // put both of the neopixels red and black into the red and black of the converter
+
+
+  // Buttons
+  if (packetbuffer[1] == 'B') {
+    uint8_t buttnum = packetbuffer[2] - '0';
+    boolean pressed = packetbuffer[3] - '0';
+
+    if (buttnum == 2) {
+      leftSpeed += 50;
+      rightSpeed += 50;
+      leftMotor->setSpeed(leftSpeed);
+      rightMotor->setSpeed(rightSpeed);
+    }
+    if (buttnum == 4) {
+      leftSpeed -= 50;
+      rightSpeed -= 50;
+      leftMotor->setSpeed(leftSpeed);
+      rightMotor->setSpeed(rightSpeed);
+    }
+
+
+    if (pressed == false and (buttnum != 1) and (buttnum != 2) and (buttnum != 3) and (buttnum != 4)) {
+
+      leftMotor->run(RELEASE);
+      rightMotor->run(RELEASE);
+
+    } else {
+
+      // put all of the other if statements in here, will only enter this loop if a button is being pressed
+
+      // pressing button 5 makes both tracks rotate forward
+      if (buttnum == 5) {
+        leftMotor->run(FORWARD);
+        rightMotor->run(BACKWARD);
+        //Ring1.ActivePattern = FADE;
+        //Ring2.ActivePattern = FADE;
+      }
+      // pressing button 6 makes both tracks rotate backward
+      if (buttnum == 6) {
+        leftMotor->run(BACKWARD);
+        rightMotor->run(FORWARD);
+      }
+      // pressing button 7 makes the right motor rotate forward
+      if (buttnum == 7) {
+        rightMotor->run(BACKWARD);
+      }
+      // pressing button 8 makes the right motor stop rotating
+      if (buttnum == 8) {
+        leftMotor->run(FORWARD);
+      }
+
+    }
+
+
+    Serial.print ("Button "); Serial.print(buttnum);
+    if (pressed) {
+      Serial.println(" pressed");
+    } else {
+      Serial.println(" released");
+    }
+  }
+  // GPS Location
+  if (packetbuffer[1] == 'L') {
+    float lat, lon, alt;
+    lat = parsefloat(packetbuffer + 2);
+    lon = parsefloat(packetbuffer + 6);
+    alt = parsefloat(packetbuffer + 10);
+    Serial.print("GPS Location\t");
+    Serial.print("Lat: "); Serial.print(lat, 4); // 4 digits of precision!
+    Serial.print('\t');
+    Serial.print("Lon: "); Serial.print(lon, 4); // 4 digits of precision!
+    Serial.print('\t');
+    Serial.print(alt, 4); Serial.println(" meters");
+  }
+
+  // Accelerometer
+  //if (packetbuffer[1] == 'A') {
+  //float x, y, z;
+  //x = parsefloat(packetbuffer+2);
+  //y = parsefloat(packetbuffer+6);
+  //z = parsefloat(packetbuffer+10);
+  //Serial.print("Accel\t");
+  //Serial.print(x); Serial.print('\t');
+  //Serial.print(y); Serial.print('\t');
+  //Serial.print(z); Serial.println();
+  //}
+
+  // Magnetometer
+  if (packetbuffer[1] == 'M') {
+    float x, y, z;
+    x = parsefloat(packetbuffer + 2);
+    y = parsefloat(packetbuffer + 6);
+    z = parsefloat(packetbuffer + 10);
+    Serial.print("Mag\t");
+    Serial.print(x); Serial.print('\t');
+    Serial.print(y); Serial.print('\t');
+    Serial.print(z); Serial.println();
+  }
+
+  // Gyroscope
+  if (packetbuffer[1] == 'G') {
+    float x, y, z;
+    x = parsefloat(packetbuffer + 2);
+    y = parsefloat(packetbuffer + 6);
+    z = parsefloat(packetbuffer + 10);
+    Serial.print("Gyro\t");
+    Serial.print(x); Serial.print('\t');
+    Serial.print(y); Serial.print('\t');
+    Serial.print(z); Serial.println();
+  }
+
+  // Quaternions
+  if (packetbuffer[1] == 'Q') {
+    float x, y, z, w;
+    x = parsefloat(packetbuffer + 2);
+    y = parsefloat(packetbuffer + 6);
+    z = parsefloat(packetbuffer + 10);
+    w = parsefloat(packetbuffer + 14);
+    Serial.print("Quat\t");
+    Serial.print(x); Serial.print('\t');
+    Serial.print(y); Serial.print('\t');
+    Serial.print(z); Serial.print('\t');
+    Serial.print(w); Serial.println();
+  }
+}
+
+
+
 // Ring1 Completion Callback
 void Ring1Complete()
 {
-    if (digitalRead(9) == LOW)  // Button #2 pressed
-    {
-        // Alternate color-wipe patterns with Ring2
+
         Ring2.Interval = 40;
         Ring1.Color1 = Ring1.Wheel(random(255));
         Ring1.Interval = 20000;
-    }
-    else  // Retrn to normal
-    {
-      Ring1.Reverse();
-    }
+
 }
 
 // Ring 2 Completion Callback
 void Ring2Complete()
 {
-    if (digitalRead(9) == LOW)  // Button #2 pressed
-    {
-        // Alternate color-wipe patterns with Ring1
         Ring1.Interval = 20;
         Ring2.Color1 = Ring2.Wheel(random(255));
         Ring2.Interval = 20000;
-    }
-    else  // Retrn to normal
-    {
-        Ring2.RainbowCycle(random(0,10));
-    }
-}
-
-// Stick Completion Callback
-void StickComplete()
-{
-    // Random color change for next scan
-    Stick.Color1 = Stick.Wheel(random(255));
 }
