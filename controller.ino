@@ -302,11 +302,7 @@ void Ring2Complete();
 
 
 
-
 /* Beginning of original code without NeoPattern Class and definitions */
-
-
-
 
 /*********************************************************************
   This is an example for our nRF51822 based Bluefruit LE modules
@@ -333,23 +329,16 @@ void Ring2Complete();
 #include "Adafruit_BluefruitLE_SPI.h"
 #include "Adafruit_BluefruitLE_UART.h"
 
-
-// added libraries for using the DC motors
+/* DC Motor Libraries */
 #include <Wire.h>
 #include <Adafruit_MotorShield.h>
 #include "utility/Adafruit_MS_PWMServoDriver.h"
 
+/* Bluefruit Library */
 #include "BluefruitConfig.h"
 
-
-// Adafruit NeoPixel Library
-
+/* Adafruit NeoPixel Library */
 #include <Adafruit_NeoPixel.h>
-
-
-
-
-
 
 
 /*=========================================================================
@@ -393,64 +382,42 @@ void Ring2Complete();
 #define LEFT_NEO 4
 #define RIGHT_NEO 5
 
-
-
-// Create the object for the motor shield and the objects for the DC motors
+/* Create Motor Shield and DC Motor objects */
 Adafruit_MotorShield motorShield = Adafruit_MotorShield();
-// the left motor corresponds to port M1
+/* Left Motor --> PORT M1 */
 Adafruit_DCMotor *leftMotor = motorShield.getMotor(1);
-// the right motor corresponds to the port M2
+/* Right Motor --> PORT M2 */
 Adafruit_DCMotor *rightMotor = motorShield.getMotor(2);
 
-// setting the default speed of the motors
 
-
-// Define the NeoPixel objects
+/* Define the NeoPixel objects */
 Adafruit_NeoPixel leftNeo = Adafruit_NeoPixel(12, LEFT_NEO);
 Adafruit_NeoPixel rightNeo = Adafruit_NeoPixel(12, RIGHT_NEO);
 
 
 //// Define the NeoPattern objects
 //// ring 1 is the left ring
-NeoPatterns Ring1(12, 4, NEO_GRB + NEO_KHZ800, &Ring1Complete);
+//NeoPatterns Ring1(12, 4, NEO_GRB + NEO_KHZ800, &Ring1Complete);
 //// ring 2 is the right ring
-NeoPatterns Ring2(12, 5, NEO_GRB + NEO_KHZ800, &Ring2Complete);
+//NeoPatterns Ring2(12, 5, NEO_GRB + NEO_KHZ800, &Ring2Complete);
 
-
-
-
-// Create the bluefruit object, either software serial...uncomment these lines
-/*
-  SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_SWUART_RXD_PIN);
-
-  Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN,
-                      BLUEFRUIT_UART_CTS_PIN, BLUEFRUIT_UART_RTS_PIN);
-*/
-
-/* ...or hardware serial, which does not need the RTS/CTS pins. Uncomment this line */
-// Adafruit_BluefruitLE_UART ble(BLUEFRUIT_HWSERIAL_NAME, BLUEFRUIT_UART_MODE_PIN);
+/* Create the bluefruit object, either software serial...uncomment these lines */
 
 /* ...hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user selected CS/IRQ/RST */
 Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
 
-/* ...software SPI, using SCK/MOSI/MISO user-defined SPI pins and then user selected CS/IRQ/RST */
-//Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_SCK, BLUEFRUIT_SPI_MISO,
-//                             BLUEFRUIT_SPI_MOSI, BLUEFRUIT_SPI_CS,
-//                             BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
-
-
-// A small helper
+/* A small helper */
 void error(const __FlashStringHelper*err) {
   Serial.println(err);
   while (1);
 }
 
-// function prototypes over in packetparser.cpp
+/* function prototypes over in packetparser.cpp */
 uint8_t readPacket(Adafruit_BLE *ble, uint16_t timeout);
 float parsefloat(uint8_t *buffer);
 void printHex(const uint8_t * data, const uint32_t numBytes);
 
-// the packet buffer
+/* the packet buffer */
 extern uint8_t packetbuffer[];
 
 
@@ -463,58 +430,57 @@ extern uint8_t packetbuffer[];
 void setup(void) {
 
 
-  // calling the begin function on the motor shield object
+  /* Begin the motor shield object */
   motorShield.begin();
 
-  Ring1.begin();
-  Ring2.begin();
+  //Ring1.begin();
+  //Ring2.begin();
 
 
-  Ring1.TheaterChase(Ring1.Color(0,255,0), Ring1.Color(0,0,255), 20);
-  Ring2.TheaterChase(Ring1.Color(0,255,0), Ring1.Color(0,0,255), 20);
+  //Ring1.TheaterChase(Ring1.Color(0,255,0), Ring1.Color(0,0,255), 20);
+  //Ring2.TheaterChase(Ring1.Color(0,255,0), Ring1.Color(0,0,255), 20);
 
 
-//  leftNeo.begin();
-//  rightNeo.begin();
-//
-//  leftNeo.show();
-//  rightNeo.show();
-//
-//  leftNeo.setBrightness(50);
-//  rightNeo.setBrightness(50);
-//
-//  rightNeo.show();
-//  leftNeo.show();
-//
-//
-//  rightNeo.setPixelColor(0, 0, 0, 255);
-//  rightNeo.setPixelColor(1, 0, 0, 255);
-//  rightNeo.setPixelColor(2, 0, 0, 255);
-//  rightNeo.setPixelColor(3, 0, 0, 255);
-//  rightNeo.setPixelColor(4, 0, 0, 255);
-//  rightNeo.setPixelColor(5, 0, 0, 255);
-//  rightNeo.setPixelColor(6, 0, 0, 255);
-//  rightNeo.setPixelColor(7, 0, 0, 255);
-//  rightNeo.setPixelColor(8, 0, 0, 255);
-//  rightNeo.setPixelColor(9, 0, 0, 255);
-//  rightNeo.setPixelColor(10, 0, 0, 255);
-//  rightNeo.setPixelColor(11, 0, 0, 255);
-//
-//  leftNeo.setPixelColor(0, 0, 0, 255);
-//  leftNeo.setPixelColor(1, 0, 0, 255);
-//  leftNeo.setPixelColor(2, 0, 0, 255);
-//  leftNeo.setPixelColor(3, 0, 0, 255);
-//  leftNeo.setPixelColor(4, 0, 0, 255);
-//  leftNeo.setPixelColor(5, 0, 0, 255);
-//  leftNeo.setPixelColor(6, 0, 0, 255);
-//  leftNeo.setPixelColor(7, 0, 0, 255);
-//  leftNeo.setPixelColor(8, 0, 0, 255);
-//  leftNeo.setPixelColor(9, 0, 0, 255);
-//  leftNeo.setPixelColor(10, 0, 0, 255);
-//  leftNeo.setPixelColor(11, 0, 0, 255);
-//
-//    rightNeo.show();
-//  leftNeo.show();
+ leftNeo.begin();
+ rightNeo.begin();
+
+ leftNeo.show();
+ rightNeo.show();
+
+ leftNeo.setBrightness(5);
+ rightNeo.setBrightness(5);
+
+ rightNeo.show();
+ leftNeo.show();
+
+ rightNeo.setPixelColor(0, 0, 0, 255);
+ rightNeo.setPixelColor(1, 0, 0, 255);
+ rightNeo.setPixelColor(2, 0, 0, 255);
+ rightNeo.setPixelColor(3, 0, 0, 255);
+ rightNeo.setPixelColor(4, 0, 0, 255);
+ rightNeo.setPixelColor(5, 0, 0, 255);
+ rightNeo.setPixelColor(6, 0, 0, 255);
+ rightNeo.setPixelColor(7, 0, 0, 255);
+ rightNeo.setPixelColor(8, 0, 0, 255);
+ rightNeo.setPixelColor(9, 0, 0, 255);
+ rightNeo.setPixelColor(10, 0, 0, 255);
+ rightNeo.setPixelColor(11, 0, 0, 255);
+
+ leftNeo.setPixelColor(0, 0, 0, 255);
+ leftNeo.setPixelColor(1, 0, 0, 255);
+ leftNeo.setPixelColor(2, 0, 0, 255);
+ leftNeo.setPixelColor(3, 0, 0, 255);
+ leftNeo.setPixelColor(4, 0, 0, 255);
+ leftNeo.setPixelColor(5, 0, 0, 255);
+ leftNeo.setPixelColor(6, 0, 0, 255);
+ leftNeo.setPixelColor(7, 0, 0, 255);
+ leftNeo.setPixelColor(8, 0, 0, 255);
+ leftNeo.setPixelColor(9, 0, 0, 255);
+ leftNeo.setPixelColor(10, 0, 0, 255);
+ leftNeo.setPixelColor(11, 0, 0, 255);
+
+ rightNeo.show();
+ leftNeo.show();
 
 
 
@@ -565,15 +531,15 @@ void setup(void) {
 
   Serial.println(F("******************************"));
 
-  // LED Activity command is only supported from 0.6.6
+  /* LED Activity command is only supported from 0.6.6 */
   if ( ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION) )
   {
-    // Change Mode LED Activity
+    /* Change Mode LED Activity */
     Serial.println(F("Change LED activity to " MODE_LED_BEHAVIOUR));
     ble.sendCommandCheckOK("AT+HWModeLED=" MODE_LED_BEHAVIOUR);
   }
 
-  // Set Bluefruit to DATA mode
+  /* Set Bluefruit to DATA mode */
   Serial.println( F("Switching to DATA mode!") );
   ble.setMode(BLUEFRUIT_MODE_DATA);
 
@@ -641,9 +607,8 @@ void loop(void)
   if (len == 0) return;
 
   /* Got a packet! */
-  // printHex(packetbuffer, len);
 
-  // Color
+  /* Color */
   if (packetbuffer[1] == 'C') {
     uint8_t red = packetbuffer[2];
     uint8_t green = packetbuffer[3];
@@ -656,15 +621,7 @@ void loop(void)
     if (blue < 0x10) Serial.print("0");
     Serial.println(blue, HEX);
   }
-
-
-  // notes about electronics:
-  // minus goes with black
-  // long wire foes with red
-  // put both of the neopixels red and black into the red and black of the converter
-
-
-  // Buttons
+  /* Buttons */
   if (packetbuffer[1] == 'B') {
     uint8_t buttnum = packetbuffer[2] - '0';
     boolean pressed = packetbuffer[3] - '0';
@@ -681,41 +638,34 @@ void loop(void)
       leftMotor->setSpeed(leftSpeed);
       rightMotor->setSpeed(rightSpeed);
     }
-
-
+    /* Enter if button is being pressed */
     if (pressed == false and (buttnum != 1) and (buttnum != 2) and (buttnum != 3) and (buttnum != 4)) {
-
       leftMotor->run(RELEASE);
       rightMotor->run(RELEASE);
-
     } else {
-
-      // put all of the other if statements in here, will only enter this loop if a button is being pressed
-
-      // pressing button 5 makes both tracks rotate forward
+      /* 5 --> FORWARD */
       if (buttnum == 5) {
         leftMotor->run(FORWARD);
         rightMotor->run(BACKWARD);
         //Ring1.ActivePattern = FADE;
         //Ring2.ActivePattern = FADE;
       }
-      // pressing button 6 makes both tracks rotate backward
+      /* 6 --> BACKWARD */
       if (buttnum == 6) {
         leftMotor->run(BACKWARD);
         rightMotor->run(FORWARD);
       }
-      // pressing button 7 makes the right motor rotate forward
+      /* 7 --> TURN LEFT */
       if (buttnum == 7) {
         rightMotor->run(BACKWARD);
       }
-      // pressing button 8 makes the right motor stop rotating
+      /* 8 --> TURN RIGHT */
       if (buttnum == 8) {
         leftMotor->run(FORWARD);
       }
 
     }
-
-
+    /* Serial monitor prints for button presses */
     Serial.print ("Button "); Serial.print(buttnum);
     if (pressed) {
       Serial.println(" pressed");
@@ -723,7 +673,8 @@ void loop(void)
       Serial.println(" released");
     }
   }
-  // GPS Location
+
+  /* GPS Location */
   if (packetbuffer[1] == 'L') {
     float lat, lon, alt;
     lat = parsefloat(packetbuffer + 2);
@@ -737,19 +688,7 @@ void loop(void)
     Serial.print(alt, 4); Serial.println(" meters");
   }
 
-  // Accelerometer
-  //if (packetbuffer[1] == 'A') {
-  //float x, y, z;
-  //x = parsefloat(packetbuffer+2);
-  //y = parsefloat(packetbuffer+6);
-  //z = parsefloat(packetbuffer+10);
-  //Serial.print("Accel\t");
-  //Serial.print(x); Serial.print('\t');
-  //Serial.print(y); Serial.print('\t');
-  //Serial.print(z); Serial.println();
-  //}
-
-  // Magnetometer
+  /* Magnetometer */
   if (packetbuffer[1] == 'M') {
     float x, y, z;
     x = parsefloat(packetbuffer + 2);
@@ -761,7 +700,7 @@ void loop(void)
     Serial.print(z); Serial.println();
   }
 
-  // Gyroscope
+  /* Gyroscope */
   if (packetbuffer[1] == 'G') {
     float x, y, z;
     x = parsefloat(packetbuffer + 2);
@@ -773,7 +712,7 @@ void loop(void)
     Serial.print(z); Serial.println();
   }
 
-  // Quaternions
+  /* Quaternions */
   if (packetbuffer[1] == 'Q') {
     float x, y, z, w;
     x = parsefloat(packetbuffer + 2);
@@ -790,7 +729,7 @@ void loop(void)
 
 
 
-// Ring1 Completion Callback
+/* Ring1 Completion Callback */
 void Ring1Complete()
 {
 
@@ -800,7 +739,7 @@ void Ring1Complete()
 
 }
 
-// Ring 2 Completion Callback
+/* Ring 2 Completion Callback */
 void Ring2Complete()
 {
         Ring1.Interval = 20;
